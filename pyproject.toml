@@ -30,5 +30,5 @@ Issues = "https://github.com/DNT-LAB/comfyui-naia-bridge/issues"
 [tool.comfy]
 PublisherId = "dnt-lab"
 DisplayName = "ComfyUI NAIA 2.0 Bridge"
-# Icon = ""  # Registry에서 나중에 업로드 가능. 400x400 이하 PNG 권장.
+# Icon = ""  # Optional. Upload later via Registry UI. PNG <= 400x400 recommended.
 # requires-comfyui = ">=0.3.0"
