@@ -42,16 +42,29 @@ ComfyUI-Manager 사용 시 자동 설치됨.
 
 ## 🚀 설치 / Installation
 
-### 방법 1: ComfyUI-Manager — "Install via Git URL" (권장)
-1. ComfyUI-Manager 열기 (Manager 버튼)
-2. **Install via Git URL** 버튼 클릭
-3. 아래 URL 붙여넣기:
-   ```
-   https://github.com/DNT-LAB/comfyui-naia-bridge
-   ```
-4. Install 클릭 → 의존성 자동 설치 완료 후 ComfyUI **완전 재시작** (백엔드 + 브라우저 탭)
+### 방법 1: ComfyUI-Manager — 검색 설치 (권장)
+가장 쉬운 방법. [ComfyUI Registry](https://registry.comfy.org/nodes/comfyui-naia-bridge) 에 등록되어 있어 Manager 내 검색으로 바로 설치 가능합니다.
 
-### 방법 2: 수동 설치 (git 직접 사용)
+1. ComfyUI 상단 **Manager** 버튼 클릭
+2. **Custom Nodes Manager** 열기
+3. 검색창에 `comfyui-naia-bridge` 또는 `naia` 입력
+4. 목록에서 **ComfyUI NAIA 2.0 Bridge** 찾아 **Install** 클릭
+5. 의존성 자동 설치 완료 후 ComfyUI **완전 재시작** (백엔드 + 브라우저 탭)
+
+### 방법 2: comfy-cli 로 설치
+```bash
+pip install comfy-cli  # 미설치 시
+comfy node install comfyui-naia-bridge
+```
+
+### 방법 3: ComfyUI-Manager "Install via Git URL"
+Manager의 `security_level` 이 `normal` 이하인 환경에서만 가능합니다 (`strong` 이상은 Registry 경로를 써야 함).
+
+1. Manager → **Install via Git URL**
+2. URL: `https://github.com/DNT-LAB/comfyui-naia-bridge`
+3. Install → ComfyUI 재시작
+
+### 방법 4: 수동 설치 (git 직접 사용)
 ```bash
 cd ComfyUI/custom_nodes
 git clone https://github.com/DNT-LAB/comfyui-naia-bridge.git
@@ -61,7 +74,8 @@ pip install -r requirements.txt
 ComfyUI 재시작.
 
 ### 업데이트 / Update
-- **ComfyUI-Manager 사용 시**: Manager의 `Try Update` 또는 `Update All` 기능으로 최신 커밋 반영
+- **ComfyUI-Manager 사용 시**: Manager의 `Try Update` 또는 `Update All`
+- **comfy-cli 사용 시**: `comfy node install comfyui-naia-bridge@latest`
 - **수동 설치 시**:
   ```bash
   cd ComfyUI/custom_nodes/comfyui-naia-bridge
