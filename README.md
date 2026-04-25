@@ -167,7 +167,13 @@ NAIA에 새 랜덤 프롬프트를 동기 요청. 20+ 입력 위젯으로 모든
 | `host` | `127.0.0.1` | NAIA 호스트 |
 | `port` | `7243` | NAIA 포트 |
 
-**출력**: `(prompt, negative_prompt)` — 문자열 2개. CLIP Text Encode에 연결 (아래 참고).
+**출력**: `(prompt, negative_prompt, width, height)` — 문자열 2개 + 정수 2개.
+
+- `prompt`, `negative_prompt`: CLIP Text Encode에 연결 (아래 참고).
+- `width`, `height`: NAIA 추천 해상도. EmptyLatentImage(또는 EmptySD3LatentImage 등)의 `width`/`height` 슬롯에 직접 연결 가능.
+  - NAIA 표준 fallback chain 미러: ① source_row 원본 해상도 (auto_fit) → ② NAIA `resolution_combo` random pick (random_resolution). NAIA 데스크톱 UI 토글 상태 무관 항상 적용.
+  - **1MP 정규화**: 응답 `width × height`가 NAI 표준 1MP (1024² = 1,048,576) 초과 시 비율 유지하며 **8배수 가장 가까운 값**으로 자동 정규화 (대부분의 SDXL/Flux/SD3/NAI 모델이 1MP 학습 기준). 1MP 이하는 변경 없음.
+  - 노드 출력 INT를 EmptyLatentImage 위젯에 연결하려면 우클릭 → "Convert Widget to Input" 필요.
 
 ### 2. `NAIA Prompt Fetch (WebSocket)`
 카테고리: `NAIA Bridge/Prompt`
@@ -190,6 +196,7 @@ NAIA 서버 연결 진단. **실패 시 raise 안 하고** `(ok=False, error_jso
 
 - **`use_naia_settings = false` 의 all-or-nothing 규약**: override 시 pre/post/auto_hide/preprocessing 전부 노드 위젯 값으로 대체됨. 일부만 지정해도 나머지는 빈 값/OFF로 처리. 데스크톱 UI 값을 부분 사용하려면 `NAIA Read Prompt Engineering` 노드로 먼저 조회 후 위젯에 수동 복사.
 - **`#` 주석 자동 제거**: NAIA 출력의 `#랜덤프롬프트` 같은 줄 단위 주석은 브리지가 제거 후 반환. NovelAI 이스케이프 syntax `#(...)` 는 보호됨.
+- **추천 해상도는 항상 활성**: ComfyUI 요청은 NAIA의 `random_resolution` / `auto_fit_resolution` UI 토글과 무관하게 항상 추천값을 계산해 응답합니다 (source_row 우선, 없으면 random fallback). NAIA 메인 UI 설정은 변경되지 않습니다.
 - **첫 실행 시 ~3초 지연**: WS 초기 연결 + prompt_sync 수신 대기. 이후 요청은 <0.3초.
 - **멀티 NAIA 인스턴스**: `(host, port)` 싱글턴 설계로 이론상 가능하나 충분한 테스트 미실시.
 

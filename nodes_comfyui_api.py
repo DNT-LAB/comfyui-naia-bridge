@@ -27,6 +27,14 @@ FIXED_TIMEOUT = 30.0
 # ComfyUI 쪽 HTTP 타임아웃은 sync timeout + 여유 5초
 HTTP_TIMEOUT = FIXED_TIMEOUT + 5.0
 
+# NAI 표준 1MP = 1024² = 1,048,576 픽셀
+# 출처: NAIA 본체 ui/comic_panel_window.py:22, ui/img2img_panel.py:472 등.
+# 대부분의 SDXL/Flux/SD3/Pony/NAI 모델이 1MP 영역에서 학습됨.
+NAI_1MP = 1024 * 1024
+# ComfyUI latent 정렬 (VAE downscale=8). NAI 자체는 64배수지만
+# ComfyUI는 8배수로 충분하며, 데이터셋 원본 비율 보존에 유리.
+LATENT_ALIGN = 8
+
 # NAIA 프롬프트에 포함된 '#랜덤프롬프트' 같은 줄 단위 섹션 주석을 제거.
 # ComfyUI CLIPTextEncode는 '#'을 주석으로 처리하지 않고 그대로 토크나이저에 넘기므로
 # 조건화(conditioning)에 미약한 노이즈가 됨. 브리지에서 선제적으로 제거.
@@ -45,6 +53,34 @@ def _clean_prompt(s: str) -> str:
     s = _HASH_COMMENT_RE.sub("", s)
     s = _MULTI_COMMA_RE.sub(",", s)
     return s.strip(" ,\n\t")
+
+
+def _fit_to_1mp(width: int, height: int) -> tuple[int, int]:
+    """1MP 초과 시 비율 유지하며 8배수 가장 가까운 값으로 정규화.
+
+    1MP 이하는 그대로 반환 (8배수 정렬도 안 함 — NAIA default 해상도가
+    이미 64배수이고, source_row 원본을 사용자가 ComfyUI 노드에서 자유롭게
+    추가 조정할 수 있도록 minimal intervention).
+
+    1MP 초과: ratio 유지하며 sqrt(NAI_1MP * ratio) / sqrt(NAI_1MP / ratio) 산출 후
+    round-to-nearest 8배수. round 결과가 1MP 초과면 큰 변을 8씩 차감.
+    """
+    if width <= 0 or height <= 0:
+        return width, height
+    if width * height <= NAI_1MP:
+        return width, height
+    ratio = width / height
+    target_w = (NAI_1MP * ratio) ** 0.5
+    target_h = (NAI_1MP / ratio) ** 0.5
+    new_w = max(LATENT_ALIGN, round(target_w / LATENT_ALIGN) * LATENT_ALIGN)
+    new_h = max(LATENT_ALIGN, round(target_h / LATENT_ALIGN) * LATENT_ALIGN)
+    # round-up 으로 1MP 초과한 경우 큰 변부터 8씩 차감 (안전망)
+    while new_w * new_h > NAI_1MP and new_w > LATENT_ALIGN and new_h > LATENT_ALIGN:
+        if new_w >= new_h:
+            new_w -= LATENT_ALIGN
+        else:
+            new_h -= LATENT_ALIGN
+    return new_w, new_h
 
 
 def _post_random(host: str, port: int, body: dict) -> dict:
@@ -107,7 +143,18 @@ class NAIARequestRandom:
     - 체크되어 있으면 NAIA도 같은 프롬프트로 병렬 이미지 생성
     - ComfyUI만 단독 생성하려면 NAIA에서 "자동 생성" 체크 해제
 
-    반환: (prompt, negative_prompt)
+    반환: (prompt, negative_prompt, width, height)
+
+    width/height — NAIA가 추천하는 해상도. NAIA 표준 fallback chain 미러:
+      1) source_row 의 원본 이미지 해상도 (auto_fit 정책)
+      2) NAIA resolution_combo 에서 랜덤 pick (random_resolution 정책)
+    NAIA 데스크톱 UI 토글 상태와 무관하게 ComfyUI 요청은 항상 위 체인으로 추천값 결정.
+
+    추가 후처리: 응답 width × height 가 NAI 표준 1MP (1024² = 1,048,576) 초과 시
+    비율 유지하며 8배수 가장 가까운 값으로 정규화 (대부분 SDXL/Flux/SD3/NAI 모델
+    1MP 학습 기준). 1MP 이하는 그대로 반환.
+
+    EmptyLatentImage 의 width/height 슬롯에 직접 연결 가능.
     """
 
     @classmethod
@@ -170,8 +217,8 @@ class NAIARequestRandom:
         })
         return {"required": required}
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("prompt", "negative_prompt")
+    RETURN_TYPES = ("STRING", "STRING", "INT", "INT")
+    RETURN_NAMES = ("prompt", "negative_prompt", "width", "height")
     FUNCTION = "request"
     CATEGORY = "NAIA Bridge/API"
 
@@ -215,11 +262,29 @@ class NAIARequestRandom:
         resp = _post_random(host, port, body)
         prompt = _clean_prompt(resp.get("prompt", "") or "")
         negative = _clean_prompt(resp.get("negative_prompt", "") or "")
+        # NAIA 표준 fallback chain (auto_fit → random pick from resolution_combo) 결과.
+        # 노드 측 추가 fallback은 두지 않음 — 응답에 누락/None이면 명확히 raise.
+        w_raw, h_raw = resp.get("width"), resp.get("height")
+        if w_raw is None or h_raw is None:
+            raise RuntimeError(
+                "[NAIA Bridge] 응답에 width/height 누락 또는 None. "
+                "NAIA 서버가 해상도 추천 패치를 포함하지 않은 구버전이거나, "
+                "NAIA의 resolution 목록이 비어있는 비정상 상태일 수 있습니다."
+            )
+        try:
+            raw_width, raw_height = int(w_raw), int(h_raw)
+        except (TypeError, ValueError):
+            raise RuntimeError(
+                f"[NAIA Bridge] 응답의 width/height 파싱 실패: {w_raw!r}, {h_raw!r}"
+            )
+        # 1MP 초과 시 비율 유지하며 8배수 정규화 (대부분 모델이 1MP 학습)
+        width, height = _fit_to_1mp(raw_width, raw_height)
         logger.debug(
-            "request_id=%s prompt_len=%d naia_started=%s",
+            "request_id=%s prompt_len=%d naia_started=%s raw=%dx%d fit=%dx%d src=%s",
             resp.get("request_id"), len(prompt), resp.get("naia_started_generation"),
+            raw_width, raw_height, width, height, resp.get("resolution_source"),
         )
-        return (prompt, negative)
+        return (prompt, negative, width, height)
 
 
 class NAIACheckHealth:

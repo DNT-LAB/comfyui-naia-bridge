@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-naia-bridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "ComfyUI custom node package for bridging NAIA 2.0 prompts into ComfyUI workflows via its Remote Web API."
 authors = [
     { name = "DNT-LAB", email = "meno9428@gmail.com" },
