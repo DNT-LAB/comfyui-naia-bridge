@@ -400,17 +400,34 @@ class NAIARequestRandomWithOverride:
     CATEGORY = "NAIA Bridge/API"
 
     @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        use_naia_bridge = kwargs.get("use_naia_bridge", True)
-        if use_naia_bridge:
+    def IS_CHANGED(
+        cls,
+        use_naia_bridge: bool = True,
+        prompt: str = "",
+        override_prompt: bool = True,
+        negative_prompt: str = "",
+        override_negative: bool = True,
+        width: int = 1024,
+        override_width: bool = True,
+        height: int = 1024,
+        override_height: bool = True,
+        **kwargs,
+    ):
+        # Robust boolean/link conversion
+        if use_naia_bridge is None:
+            is_active = True
+        elif isinstance(use_naia_bridge, str):
+            is_active = use_naia_bridge.lower() in ("true", "1", "yes", "on", "enable", "enabled")
+        elif isinstance(use_naia_bridge, (list, tuple)):
+            # If it is connected via a link from another node, always assume active (always refresh)
+            is_active = True
+        else:
+            is_active = bool(use_naia_bridge)
+
+        if is_active:
             return float("nan")
         else:
-            return hash((
-                kwargs.get("prompt", ""),
-                kwargs.get("negative_prompt", ""),
-                kwargs.get("width", 1024),
-                kwargs.get("height", 1024),
-            ))
+            return hash((str(prompt), str(negative_prompt), str(width), str(height)))
 
     def request(
         self,
@@ -477,6 +494,153 @@ class NAIARequestRandomWithOverride:
         logger.debug(
             "request_id=%s prompt_len=%d naia_started=%s raw=%dx%d fit=%dx%d src=%s",
             resp.get("request_id"), len(naia_prompt), resp.get("naia_started_generation"),
+            raw_width, raw_height, naia_width, naia_height, resp.get("resolution_source"),
+        )
+
+        out_prompt = naia_prompt if override_prompt else prompt
+        out_negative = naia_negative if override_negative else negative_prompt
+        out_width = naia_width if override_width else width
+        out_height = naia_height if override_height else height
+
+        return (out_prompt, out_negative, out_width, out_height)
+
+
+class NAIARequestRandomWithSeed:
+    """NAIA에서 새 랜덤 프롬프트를 동기적으로 요청하며, 시드(Seed) 값에 기반하여 프롬프트 재사용, 캐싱 및 오버라이드를 지원하는 간소화 노드."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "seed": ("INT", {
+                    "default": 0, "min": 0, "max": 0xffffffffffffffff,
+                    "tooltip": "시드 값이 동일하면 이전 프롬프트를 재사용(캐싱)하고, 값이 변경되면 NAIA에서 새 랜덤 프롬프트를 요청합니다.",
+                }),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "placeholder": "prompt — 프롬프트 텍스트 입력 또는 연결",
+                    "tooltip": "override_prompt가 off일 때 출력될 프롬프트입니다.",
+                }),
+                "override_prompt": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "true (기본): NAIA에서 가져온 프롬프트로 덮어씁니다.\nfalse: 입력받은 prompt를 그대로 출력합니다.",
+                }),
+                "negative_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "placeholder": "negative_prompt — 네거티브 프롬프트 텍스트 입력 또는 연결",
+                    "tooltip": "override_negative가 off일 때 출력될 네거티브 프롬프트입니다.",
+                }),
+                "override_negative": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "true (기본): NAIA에서 가져온 네거티브 프롬프트로 덮어씁니다.\nfalse: 입력받은 negative_prompt를 그대로 출력합니다.",
+                }),
+                "width": ("INT", {
+                    "default": 1024, "min": 64, "max": 8192, "step": 8,
+                    "tooltip": "override_width가 off일 때 출력될 이미지 가로 크기입니다.",
+                }),
+                "override_width": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "true (기본): NAIA에서 가져온 추천 width로 덮어씁니다.\nfalse: 입력받은 width를 그대로 출력합니다.",
+                }),
+                "height": ("INT", {
+                    "default": 1024, "min": 64, "max": 8192, "step": 8,
+                    "tooltip": "override_height가 off일 때 출력될 이미지 세로 크기입니다.",
+                }),
+                "override_height": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "true (기본): NAIA에서 가져온 추천 height로 덮어씁니다.\nfalse: 입력받은 height를 그대로 출력합니다.",
+                }),
+                "host": ("STRING", {
+                    "default": DEFAULT_HOST,
+                    "tooltip": "NAIA Remote API 호스트 (기본 127.0.0.1).",
+                }),
+                "port": ("INT", {
+                    "default": DEFAULT_PORT, "min": 1, "max": 65535,
+                    "tooltip": "NAIA Remote API 포트 (기본 7243).",
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "INT", "INT")
+    RETURN_NAMES = ("prompt", "negative_prompt", "width", "height")
+    FUNCTION = "request"
+    CATEGORY = "NAIA Bridge/API"
+
+    @classmethod
+    def IS_CHANGED(
+        cls,
+        seed: int = 0,
+        prompt: str = "",
+        override_prompt: bool = True,
+        negative_prompt: str = "",
+        override_negative: bool = True,
+        width: int = 1024,
+        override_width: bool = True,
+        height: int = 1024,
+        override_height: bool = True,
+        host: str = "127.0.0.1",
+        port: int = 7243,
+        **kwargs,
+    ):
+        # 모든 입력 및 오버라이드 조건 중 하나라도 변경되면 재실행, 동일하면 완벽하게 캐싱
+        return hash((
+            seed,
+            str(prompt),
+            bool(override_prompt),
+            str(negative_prompt),
+            bool(override_negative),
+            str(width),
+            bool(override_width),
+            str(height),
+            bool(override_height),
+            str(host),
+            int(port),
+        ))
+
+    def request(
+        self,
+        seed: int,
+        prompt: str,
+        override_prompt: bool,
+        negative_prompt: str,
+        override_negative: bool,
+        width: int,
+        override_width: bool,
+        height: int,
+        override_height: bool,
+        host: str,
+        port: int,
+    ):
+        body: dict = {
+            "timeout": FIXED_TIMEOUT,
+            "respect_naia_autogen": True,
+            "force_naia_skip_generate": False,
+        }
+
+        resp = _post_random(host, port, body)
+        naia_prompt = _clean_prompt(resp.get("prompt", "") or "")
+        naia_negative = _clean_prompt(resp.get("negative_prompt", "") or "")
+        
+        w_raw, h_raw = resp.get("width"), resp.get("height")
+        if w_raw is None or h_raw is None:
+            raise RuntimeError(
+                "[NAIA Bridge] 응답에 width/height 누락 또는 None. "
+                "NAIA 서버가 해상도 추천 패치를 포함하지 않은 구버전이거나, "
+                "NAIA의 resolution 목록이 비어있는 비정상 상태일 수 있습니다."
+            )
+        try:
+            raw_width, raw_height = int(w_raw), int(h_raw)
+        except (TypeError, ValueError):
+            raise RuntimeError(
+                f"[NAIA Bridge] 응답의 width/height 파싱 실패: {w_raw!r}, {h_raw!r}"
+            )
+        
+        naia_width, naia_height = _fit_to_1mp(raw_width, raw_height)
+        logger.debug(
+            "seed=%d request_id=%s prompt_len=%d naia_started=%s raw=%dx%d fit=%dx%d src=%s",
+            seed, resp.get("request_id"), len(naia_prompt), resp.get("naia_started_generation"),
             raw_width, raw_height, naia_width, naia_height, resp.get("resolution_source"),
         )
 

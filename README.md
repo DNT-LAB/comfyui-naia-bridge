@@ -188,17 +188,26 @@ NAIA에 새 랜덤 프롬프트를 동기 요청. 20+ 입력 위젯으로 모든
   - `true` (on): NAIA 서버에서 실시간으로 가져온 랜덤 프롬프트 및 추천 해상도로 덮어씁니다.
   - `false` (off): 위젯으로 직접 입력받았거나 외부 노드에서 온 입력값을 그대로 보존하여 출력합니다.
 
-### 3. `NAIA Prompt Fetch (WebSocket)`
+### 3. `NAIA Request Random Prompt (with Seed)` (시드 연동형 간소화 노드)
+카테고리: `NAIA Bridge/API`
+
+`use_naia_settings = true` 고정 상태로 복잡한 15종 전처리 및 프리/포스트 프롬프트 위젯을 모두 제외하여 외관을 대폭 간소화한 노드입니다. 시드(Seed) 입력을 직접 지원하여 ComfyUI의 표준 캐싱 메커니즘과 완벽히 연동됩니다.
+
+- **시드 연동형 자동 재사용**:
+  - `seed` 입력 값이 동일하게 유지될 경우, NAIA 서버를 중복 요청하지 않고 이전 실행 시점에 생성되었던 프롬프트, 네거티브, 가로/세로 해상도를 완벽히 재사용(ComfyUI 네이티브 캐싱)합니다.
+  - `seed` 값이 변경(또는 Randomize)되면, ComfyUI가 자동으로 감지하여 NAIA 서버로부터 새로운 랜덤 프롬프트를 동기 요청하여 받아옵니다.
+
+### 4. `NAIA Prompt Fetch (WebSocket)`
 카테고리: `NAIA Bridge/Prompt`
 
 NAIA 메인 UI 또는 Web Remote에서 **현재 편집/표시 중인** 프롬프트를 WS 캐시에서 가져옴. 랜덤 요청이 아니라 "지금 화면에 있는 값"을 미러.
 
-### 4. `NAIA Read Prompt Engineering`
+### 5. `NAIA Read Prompt Engineering`
 카테고리: `NAIA Bridge/Engineering`
 
 NAIA의 Prompt Engineering 모듈 현재 상태 조회 (디버그/검토용). pre/post/auto_hide, 15종 전처리 JSON, 프리셋 목록 반환.
 
-### 5. `NAIA Check Health`
+### 6. `NAIA Check Health`
 카테고리: `NAIA Bridge/API`
 
 NAIA 서버 연결 진단. **실패 시 raise 안 하고** `(ok=False, error_json)` 반환 → 조건부 게이팅 노드로 활용 가능.
