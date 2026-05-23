@@ -175,17 +175,39 @@ NAIA에 새 랜덤 프롬프트를 동기 요청. 20+ 입력 위젯으로 모든
   - **1MP 정규화**: 응답 `width × height`가 NAI 표준 1MP (1024² = 1,048,576) 초과 시 비율 유지하며 **8배수 가장 가까운 값**으로 자동 정규화 (대부분의 SDXL/Flux/SD3/NAI 모델이 1MP 학습 기준). 1MP 이하는 변경 없음.
   - 노드 출력 INT를 EmptyLatentImage 위젯에 연결하려면 우클릭 → "Convert Widget to Input" 필요.
 
-### 2. `NAIA Prompt Fetch (WebSocket)`
+### 2. `NAIA Request Random Prompt (with Override)` (변형 노드)
+카테고리: `NAIA Bridge/API`
+
+`NAIA Request Random Prompt` 노드의 확장형 변형 노드. 출력으로 제공하는 4가지 값(`prompt`, `negative_prompt`, `width`, `height`)을 직접 입력(Widget 또는 Input)으로도 연동할 수 있으며, 개별 오버라이드 및 캐싱 유지 기능이 추가되어 더욱 유연한 워크플로우 제어가 가능합니다.
+
+- **브릿지 바이패스 (`use_naia_bridge`)**: 
+  - `false` (off)로 설정 시 NAIA 서버 요청을 아예 시도하지 않고, 입력된 4가지 값을 그대로 즉시 출력으로 통과시킵니다.
+  - 이 상태에서는 입력값이 바뀌지 않았다면 ComfyUI의 실행 캐싱(Caching)이 완벽히 유지되어 노드가 불필요하게 재실행되지 않습니다.
+- **개별 오버라이드 제어 (`override_*`)**:
+  - `override_prompt`, `override_negative`, `override_width`, `override_height` 토글을 제공합니다.
+  - `true` (on): NAIA 서버에서 실시간으로 가져온 랜덤 프롬프트 및 추천 해상도로 덮어씁니다.
+  - `false` (off): 위젯으로 직접 입력받았거나 외부 노드에서 온 입력값을 그대로 보존하여 출력합니다.
+
+### 3. `NAIA Request Random Prompt (with Seed)` (시드 연동형 간소화 노드)
+카테고리: `NAIA Bridge/API`
+
+`use_naia_settings = true` 고정 상태로 복잡한 15종 전처리 및 프리/포스트 프롬프트 위젯을 모두 제외하여 외관을 대폭 간소화한 노드입니다. 시드(Seed) 입력을 직접 지원하여 ComfyUI의 표준 캐싱 메커니즘과 완벽히 연동됩니다.
+
+- **시드 연동형 자동 재사용**:
+  - `seed` 입력 값이 동일하게 유지될 경우, NAIA 서버를 중복 요청하지 않고 이전 실행 시점에 생성되었던 프롬프트, 네거티브, 가로/세로 해상도를 완벽히 재사용(ComfyUI 네이티브 캐싱)합니다.
+  - `seed` 값이 변경(또는 Randomize)되면, ComfyUI가 자동으로 감지하여 NAIA 서버로부터 새로운 랜덤 프롬프트를 동기 요청하여 받아옵니다.
+
+### 4. `NAIA Prompt Fetch (WebSocket)`
 카테고리: `NAIA Bridge/Prompt`
 
 NAIA 메인 UI 또는 Web Remote에서 **현재 편집/표시 중인** 프롬프트를 WS 캐시에서 가져옴. 랜덤 요청이 아니라 "지금 화면에 있는 값"을 미러.
 
-### 3. `NAIA Read Prompt Engineering`
+### 5. `NAIA Read Prompt Engineering`
 카테고리: `NAIA Bridge/Engineering`
 
 NAIA의 Prompt Engineering 모듈 현재 상태 조회 (디버그/검토용). pre/post/auto_hide, 15종 전처리 JSON, 프리셋 목록 반환.
 
-### 4. `NAIA Check Health`
+### 6. `NAIA Check Health`
 카테고리: `NAIA Bridge/API`
 
 NAIA 서버 연결 진단. **실패 시 raise 안 하고** `(ok=False, error_json)` 반환 → 조건부 게이팅 노드로 활용 가능.
