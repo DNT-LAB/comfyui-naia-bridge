@@ -19,11 +19,12 @@ ComfyUI 워크플로우에서 NAIA 2.0 (https://github.com/DNT-LAB/NAIA2.0)의 R
 """
 from .nodes_prompt import NAIAPromptFetch_WS
 from .nodes_engineering import NAIAReadPromptEngineering
-from .nodes_comfyui_api import NAIARequestRandom, NAIACheckHealth
+from .nodes_comfyui_api import NAIARequestRandom, NAIARequestRandomWithOverride, NAIACheckHealth
 
 NODE_CLASS_MAPPINGS = {
     "NAIAPromptFetch_WS": NAIAPromptFetch_WS,
     "NAIARequestRandom": NAIARequestRandom,
+    "NAIARequestRandomWithOverride": NAIARequestRandomWithOverride,
     "NAIAReadPromptEngineering": NAIAReadPromptEngineering,
     "NAIACheckHealth": NAIACheckHealth,
 }
@@ -31,6 +32,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "NAIAPromptFetch_WS": "NAIA Prompt Fetch (WebSocket)",
     "NAIARequestRandom": "NAIA Request Random Prompt",
+    "NAIARequestRandomWithOverride": "NAIA Request Random Prompt (with Override)",
     "NAIAReadPromptEngineering": "NAIA Read Prompt Engineering",
     "NAIACheckHealth": "NAIA Check Health",
 }
